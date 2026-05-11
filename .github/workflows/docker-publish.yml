@@ -12,6 +12,11 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-24.04
+    # Grant permissions to the GITHUB_TOKEN so it can push to GHCR
+    permissions:
+      contents: read
+      packages: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
