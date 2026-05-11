@@ -45,6 +45,7 @@ sudo apt-get install -y \
     ninja-build \
     pkg-config \
     python3-dev \
+    python-is-python3 \
     ragel \
     sudo
 
