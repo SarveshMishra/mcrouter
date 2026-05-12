@@ -18,6 +18,7 @@
 #include <folly/Singleton.h>
 #include <folly/synchronization/CallOnce.h>
 
+#include <folly/ssl/OpenSSLCertUtils.h>
 #include "mcrouter/lib/fbi/cpp/LogFailure.h"
 
 namespace facebook {
@@ -44,8 +45,23 @@ FizzContextAndVerifier createClientFizzContextAndVerifier(
   // Thrift's Rocket transport requires an ALPN
   ctx->setSupportedAlpns({"rs"});
   if (!certData.empty() && !keyData.empty()) {
-    auto cert = fizz::openssl::CertUtils::makeSelfCert(
-        std::move(certData), std::move(keyData));
+
+    std::vector<folly::ssl::X509UniquePtr> parsedCerts;
+    try {
+      parsedCerts = folly::ssl::OpenSSLCertUtils::readCertsFromBuffer(certData);
+    } catch (...) {}
+    folly::ssl::EvpPkeyUniquePtr parsedKey;
+    try {
+      parsedKey = folly::ssl::OpenSSLCertUtils::readPrivateKeyFromBuffer(keyData);
+    } catch (...) {}
+    std::unique_ptr<fizz::SelfCert> cert;
+    fizz::Error fizz_err_1;
+    auto fizz_status_1 = fizz::openssl::CertUtils::makeSelfCert(
+        cert, fizz_err_1, std::move(parsedCerts), std::move(parsedKey), {});
+    if (fizz_status_1 != fizz::Status::Success) {
+      throw std::runtime_error("makeSelfCert failed");
+    }
+
     auto certMgr = std::make_shared<fizz::client::CertManager>();
     certMgr->addCert(std::move(cert));
     ctx->setClientCertManager(std::move(certMgr));
@@ -80,8 +96,23 @@ std::shared_ptr<fizz::server::FizzServerContext> createFizzServerContext(
     wangle::TLSTicketKeySeeds* ticketKeySeeds) {
   auto certMgr = std::make_shared<fizz::server::DefaultCertManager>();
   try {
-    auto selfCert =
-        fizz::openssl::CertUtils::makeSelfCert(certData.str(), keyData.str());
+
+    std::vector<folly::ssl::X509UniquePtr> parsedCerts;
+    try {
+      parsedCerts = folly::ssl::OpenSSLCertUtils::readCertsFromBuffer(certData.str());
+    } catch (...) {}
+    folly::ssl::EvpPkeyUniquePtr parsedKey;
+    try {
+      parsedKey = folly::ssl::OpenSSLCertUtils::readPrivateKeyFromBuffer(keyData.str());
+    } catch (...) {}
+    std::unique_ptr<fizz::SelfCert> selfCert;
+    fizz::Error fizz_err_2;
+    auto fizz_status_2 = fizz::openssl::CertUtils::makeSelfCert(
+        selfCert, fizz_err_2, std::move(parsedCerts), std::move(parsedKey), {});
+    if (fizz_status_2 != fizz::Status::Success) {
+      throw std::runtime_error("makeSelfCert failed");
+    }
+
     // add the default cert
     certMgr->addCertAndSetDefault(std::move(selfCert));
   } catch (const std::exception& ex) {
